@@ -3,7 +3,7 @@ import socket
 from time import time
 from functools import wraps
 
-HUE_TRANSITION_TIME = 1 # default 400
+HUE_TRANSITION_TIME = 0 # default 400
 
 
 def print_time(f):
@@ -27,6 +27,7 @@ def send_to_group(group_id, parsed):
 
 @print_time
 def send_to_light(id, parsed):
+    print(parsed)
     return requests.put(f"{HUE_BASE_URL}lights/{id}/state", json=parsed)
 
 
@@ -51,6 +52,14 @@ def listen():
         elif 'id' in parsed:
             id = parsed.pop('id')
             r = requests.put(f"{HUE_BASE_URL}lights/{id}/state", json=parsed)
+        elif 'sector' in parsed:
+            sector_id = parsed.pop('sector')
+            if sector_id < 0:
+                print('Negative sector!')
+            for i in range(len(ALL_LIGHTS)):
+                send_to_light(ALL_LIGHTS[i], {"on": i == sector_id,
+                                              "transitiontime": 1,
+                                              "bri": 150})
         else:
             for id in ALL_LIGHTS:
                 r = send_to_light(id, parsed)
@@ -83,7 +92,8 @@ def get_lights():
     r = requests.get(HUE_BASE_URL + 'lights')
     return [k for k, v in r.json().items() if v['state']['reachable']]
 
-ALL_LIGHTS = get_lights()
+#ALL_LIGHTS = get_lights()
+ALL_LIGHTS = [2, 1, 6, 4, 5]
 
 def set_brightness(id, brightness):
     return requests.put(f"{HUE_BASE_URL}lights/{id}/state", json={'on': True, 'bri': brightness})
@@ -120,7 +130,7 @@ def parse_data(data):
     assignments = data.split(',')
     parsed = dict([a.split('=') for a in assignments])
 
-    for k in [key for key in ['bri', 'hue'] if key in parsed]:
+    for k in [key for key in ['bri', 'hue', 'sector'] if key in parsed]:
         parsed[k] = int(parsed[k])
 
     k = 'on'

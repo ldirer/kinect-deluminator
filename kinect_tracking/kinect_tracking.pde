@@ -27,6 +27,9 @@ color[] userColor = new color[]{ color(255,0,0), color(0,255,0), color(0,0,255),
 // postion of head to draw circle
 PVector headPosition = new PVector();
 PVector leftHandPosition = new PVector();
+PVector torsoPosition = new PVector();
+PVector leftElbowPosition = new PVector();
+
 PVector[] leftHandPositions = new PVector[10000];
 
 // turn headPosition into scalar form
@@ -71,6 +74,12 @@ head if confidence of tracking is above threshold
 void draw(){
   // update the camera
   kinect.update();
+
+   
+  // translate(width/2, height/2, 0);
+  //rotateX(radians(180));
+  
+  
   // get Kinect data
   kinectDepth = kinect.depthImage();
   // draw depth image at coordinates (0,0)
@@ -78,7 +87,9 @@ void draw(){
  
    // get all user IDs of tracked users
   userID = kinect.getUsers();
- 
+
+
+
   // loop through each user to see if tracking
   for(int i=0;i<userID.length;i++)
   {
@@ -104,6 +115,22 @@ void draw(){
   } //for(int i=0;i<userID.length;i++)
 } // void draw()
  
+ 
+ void printPosition(PVector p) {
+  println("position: (x, y, z): " + p.x + ", " + p.y + ", " + p.z);
+
+ }
+ 
+ 
+ float[] vectorDiff(PVector v, PVector w) {
+   float[] d = new float[3];
+   d[0] = v.x - w.x;
+      d[1] = v.y - w.y;
+            d[2] = v.z - w.z;
+   return d;
+ }
+ 
+ 
 /*---------------------------------------------------------------
 Draw the skeleton of a tracked user.  Input is userID
 ----------------------------------------------------------------*/
@@ -123,24 +150,90 @@ void drawSkeleton(int userId){
   distanceScalar = (525/headPosition.z);
   // draw the circle at the position of the head with the head size scaled by the distance scalar
   ellipse(headPosition.x,headPosition.y, distanceScalar*headSize,distanceScalar*headSize);
-  
+
+    PMatrix3D orientation = new PMatrix3D();
+    PMatrix3D torsoOrientation = new PMatrix3D();
+    float confidence_orientation = kinect.getJointOrientationSkeleton(userId, SimpleOpenNI.SKEL_LEFT_HAND, orientation);
+    kinect.getJointOrientationSkeleton(userId, SimpleOpenNI.SKEL_TORSO, torsoOrientation);
+
+      //println("Orientation" + orientation.toString());
+
   kinect.getJointPositionSkeleton(userId, SimpleOpenNI.SKEL_LEFT_HAND, leftHandPosition);
+  kinect.getJointPositionSkeleton(userId, SimpleOpenNI.SKEL_LEFT_ELBOW, leftElbowPosition);
   kinect.getJointPositionSkeleton(userId, SimpleOpenNI.SKEL_LEFT_KNEE, leftKneePosition);
+  kinect.getJointPositionSkeleton(userId, SimpleOpenNI.SKEL_TORSO, torsoPosition);
   
   maxLeftHandY = max(leftHandPosition.y, maxLeftHandY);
   minLeftHandY = min(leftHandPosition.y, minLeftHandY);
   
+  float[] handToElbow = vectorDiff(leftHandPosition, leftElbowPosition);   
+  float norm2d = sqrt(pow(handToElbow[0], 2) + pow(handToElbow[2], 2));
+  float[] normalized = {handToElbow[0] / norm2d, handToElbow[2] / norm2d};
+  float theta = acos(normalized[0]);
+  
+  println("theta: " + theta * 180 / PI);
+  
+  int sector = 0;
+  while (PI/10*(sector+1) < theta) sector++;
+  println("sector: "+sector);
+  
+  sector -= 2;
+  //float theta2 = asin(normalized[1]);
+  //println("theta2: " + theta2 * 180 / PI);
+
+  
   MAXY = headPosition.y;
   MINY = leftKneePosition.y;
-  if(i % 10 == 0) {
-      println("min " + MINY + "max " + MAXY, "hand", leftHandPosition.y);
+  
+  PVector position = torsoPosition;
+          // draw x-axis in red
+      //stroke(255, 0, 0);
+      //strokeWeight(13);
+      //line(0, 0, 0, 350, 0, 0);
+      //printPosition(position);
 
+       pushMatrix();
+       
+       //orientation.
+      // move to the position of the TORSO
+      // position.z?
+      //position.y
+      translate(position.x, position.y, -position.z); //<>//
+      // adopt the TORSO's orientation
+      // to be our coordinate system
+      applyMatrix(orientation);
+      // draw x-axis in red
+      stroke(255, 0, 0);
+      strokeWeight(13);
+      line(0, 0, 0, 350, 0, 0);
+      // draw y-axis in blues
+      stroke(0, 255, 0);
+      line(0, 0, 0, 0, 150, 0);
+      // draw z-axis in green
+      stroke(0, 0, 255);
+      line(0, 0, 0, 0, 0, 150);
+
+      popMatrix();
+  
+      strokeWeight(2);
+
+
+  if(i % 30 == 0) {
+  
+    println("Hand to elbow " + handToElbow[0] + ", " + handToElbow[1] + ", " + handToElbow[2]);
+  }
+  if(i % 10 == 0) {
+    
+   
+      //println("min " + MINY + "max " + MAXY, "hand", leftHandPosition.y);
       //println("min " + minLeftHandY + "max " + maxLeftHandY);
-      float scaledY = (leftHandPosition.y - MINY) / (MAXY - MINY) * 255; 
-      int bri = ceil(scaledY); 
-      bri = min(bri, 255);
-      bri = max(bri, 1);
-      String message = "bri=" + bri + "\n";
+      //float scaledY = (leftHandPosition.y - MINY) / (MAXY - MINY) * 255; 
+      //int bri = ceil(scaledY); 
+      //bri = min(bri, 255);
+      //bri = max(bri, 1);
+      //String message = "bri=" + bri + "\n";
+      
+      String message = "sector=" + (4-sector) + " \n";
       println("Sending: " + message);
       myClient.write(message);
   }
@@ -222,7 +315,7 @@ public void setup_hue()
 
 public void setup() {
     // create a window the size of the depth information
-  size(640, 480);
+  size(640, 480, P3D);
   //setup_hue();
   setup_tracking();
 }
